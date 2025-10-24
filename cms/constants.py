@@ -64,6 +64,37 @@ STAR_SCHEMA = [
     "zip",
 ]
 
+# Prediction/Evaluation schemas for DuckDB
+PREDICTIONS_SCHEMA = [
+    "ccn",
+    "period_end",  # target period end
+    "target_release",  # label like YYYY_MM (what we're predicting)
+    "model_name",
+    "prediction_type",  # 'direct_star' | 'composite_star'
+    "pred_star",
+    "conf_lo",
+    "conf_hi",
+    "prob_star_1",
+    "prob_star_2",
+    "prob_star_3",
+    "prob_star_4",
+    "prob_star_5",
+    "generated_at",
+]
+
+EVALUATIONS_SCHEMA = [
+    "ccn",
+    "period_end",
+    "target_release",
+    "model_name",
+    "prediction_type",
+    "pred_star",
+    "actual_star",
+    "abs_error",
+    "within_band",  # 1 if actual in [conf_lo, conf_hi]
+    "evaluated_at",
+]
+
 METRICS_CATALOG_SCHEMA = [
     "measure_id",
     "measure_name",

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from datetime import date
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 from dateutil import parser
 import pandas as pd
@@ -62,3 +62,77 @@ def clean_column_names(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in df.columns]
     return df
+
+
+# ---------------------------
+# Release label helpers
+# ---------------------------
+
+def parse_release_label(label: str) -> Optional[Tuple[int, int]]:
+    """Parse a release label like 'YYYY_MM' into (year, month).
+
+    Returns None if parsing fails.
+    """
+    if label is None:
+        return None
+    m = re.fullmatch(r"(20\d{2})[_-]?([01]\d)", str(label))
+    if not m:
+        return None
+    year = int(m.group(1))
+    month = int(m.group(2))
+    if month < 1 or month > 12:
+        return None
+    return year, month
+
+
+def format_release_label(year: int, month: int) -> str:
+    """Format (year, month) to 'YYYY_MM' with zero-padded month."""
+    return f"{year:04d}_{month:02d}"
+
+
+def add_months_to_release(label: str, months: int = 1) -> Optional[str]:
+    """Add months to a release label and return the new label.
+
+    If label parsing fails, returns None.
+    """
+    ym = parse_release_label(label)
+    if ym is None:
+        return None
+    year, month = ym
+    total = year * 12 + (month - 1) + months
+    new_year = total // 12
+    new_month = (total % 12) + 1
+    return format_release_label(new_year, new_month)
+
+
+def next_release_label(current_label: str) -> Optional[str]:
+    """Convenience to get the next release label after current_label.
+
+    This assumes monthly increments (YYYY_MM). If CMS releases are quarterly
+    in your archive, you can call add_months_to_release(label, months=3).
+    """
+    return add_months_to_release(current_label, months=1)
+
+
+# ---------------------------
+# Domain direction helpers
+# ---------------------------
+
+def direction_from_domain(domain: Optional[str]) -> Optional[str]:
+    """Infer direction label given a domain.
+
+    Returns one of 'HIGHER_BETTER', 'LOWER_BETTER', or None when unknown.
+    Heuristics:
+      - PatientExperience: higher better (HCAHPS are top-box percentages)
+      - Timely: higher better (many are compliance/percent; time-based are rarer)
+      - Readmission/Mortality/Safety: lower better
+    """
+    if domain is None:
+        return None
+    d = str(domain)
+    if d == "PatientExperience" or d == "Timely":
+        return "HIGHER_BETTER"
+    if d in {"Readmission", "Mortality", "Safety"}:
+        return "LOWER_BETTER"
+    return None
+

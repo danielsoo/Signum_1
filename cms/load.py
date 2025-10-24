@@ -51,6 +51,44 @@ def load_duckdb(metrics: pd.DataFrame, star: pd.DataFrame, catalog: pd.DataFrame
             con.register("df_catalog", catalog)
             con.execute("CREATE TABLE IF NOT EXISTS metrics_catalog AS SELECT * FROM df_catalog WHERE 1=0;")
             con.execute("INSERT INTO metrics_catalog SELECT * FROM df_catalog;")
+
+        # Ensure prediction/evaluation tables exist (empty schema init)
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS star_predictions (
+                ccn VARCHAR,
+                period_end DATE,
+                target_release VARCHAR,
+                model_name VARCHAR,
+                prediction_type VARCHAR,
+                pred_star DOUBLE,
+                conf_lo DOUBLE,
+                conf_hi DOUBLE,
+                prob_star_1 DOUBLE,
+                prob_star_2 DOUBLE,
+                prob_star_3 DOUBLE,
+                prob_star_4 DOUBLE,
+                prob_star_5 DOUBLE,
+                generated_at TIMESTAMP
+            );
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS star_evaluations (
+                ccn VARCHAR,
+                period_end DATE,
+                target_release VARCHAR,
+                model_name VARCHAR,
+                prediction_type VARCHAR,
+                pred_star DOUBLE,
+                actual_star DOUBLE,
+                abs_error DOUBLE,
+                within_band INTEGER,
+                evaluated_at TIMESTAMP
+            );
+            """
+        )
     finally:
         con.close()
     return db_path

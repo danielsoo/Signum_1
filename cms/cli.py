@@ -11,6 +11,8 @@ from .transform import transform_all
 from .load import save_parquet, load_duckdb
 from .validate import write_report
 from .constants import DEFAULT_WAREHOUSE_DIR, DEFAULT_REPORTS_DIR
+from .model import predict_next_star_for_ccn, persist_prediction, evaluate_predictions_for_release
+from .insights import domain_trends_for_hospital, summarize_hospital
 
 app = typer.Typer(help="CMS Hospital ETL runner")
 
@@ -85,6 +87,56 @@ def sample(
     from .sample_extractor import build_star_training_sample
     path = build_star_training_sample(warehouse_dir, out)
     print({"sample": path})
+
+
+@app.command()
+def predict(
+    ccn: str = typer.Argument(..., help="Hospital CCN (6 digits)"),
+    warehouse_dir: str = typer.Option(DEFAULT_WAREHOUSE_DIR, help="Warehouse dir"),
+    steps_ahead: int = typer.Option(1, help="Months ahead to predict", min=1, max=6),
+    save: bool = typer.Option(True, help="Persist prediction to DuckDB"),
+):
+    """Generate next-release star prediction with uncertainty and optional persistence."""
+    pred = predict_next_star_for_ccn(ccn, warehouse_dir, steps_ahead=steps_ahead)
+    if pred is None:
+        print({"error": "No historical star data for CCN"})
+        raise typer.Exit(code=1)
+    if save:
+        persist_prediction(pred, warehouse_dir)
+    out = {
+        "ccn": pred.ccn,
+        "target_release": pred.target_release,
+        "model": pred.model_name,
+        "type": pred.prediction_type,
+        "pred_star": round(pred.pred_star, 3),
+        "conf": [pred.conf_lo, pred.conf_hi],
+        "probs": pred.probs,
+    }
+    print(out)
+
+
+@app.command()
+def evaluate(
+    target_release: str = typer.Argument(..., help="Release label YYYY_MM to evaluate"),
+    warehouse_dir: str = typer.Option(DEFAULT_WAREHOUSE_DIR, help="Warehouse dir"),
+):
+    """Compare saved predictions for a release vs official star when available."""
+    df = evaluate_predictions_for_release(target_release, warehouse_dir)
+    print({
+        "evaluated": int(len(df)),
+        "mae": None if df.empty else float(df["abs_error"].dropna().mean()),
+        "coverage_68": None if df.empty else float(df["within_band"].mean()),
+    })
+
+
+@app.command()
+def insights(
+    ccn: str = typer.Argument(..., help="Hospital CCN (6 digits)"),
+    warehouse_dir: str = typer.Option(DEFAULT_WAREHOUSE_DIR, help="Warehouse dir"),
+):
+    """Show latest official star (if any), latest prediction, and domain trends."""
+    summary = summarize_hospital(ccn, warehouse_dir)
+    print(summary)
 
 
 if __name__ == "__main__":

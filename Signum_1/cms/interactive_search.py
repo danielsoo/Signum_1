@@ -89,147 +89,145 @@ def search_interactive(warehouse_dir: str) -> None:
 
 
 def search_hospital_interactive(warehouse_dir: str) -> str:
-    """Interactive hospital search - returns 'back' or 'exit'"""
+    """Interactive hospital search using DuckDB - returns 'back' or 'exit'"""
     from .search_engine import HospitalSearchEngine
-    from .risk_analyzer import RiskAnalyzer
-    from .rating_comparator import RatingComparator
     
     # Get user input
-    print("\nEnter hospital information:")
-    hospital_name = ask("Hospital name")
-    city = ask("City")
-    state = ask("State (2 letters, e.g., CA, NY)")
-    postal = ask("Postal code")
+    print("\nSearch hospitals by name:")
+    hospital_name = ask("Hospital name (e.g., Mayo Clinic)")
+    state = ask("State (optional, e.g., MN)", "")
     
-    # Build search query
-    query_parts = []
-    if hospital_name:
-        query_parts.append(hospital_name)
-    if city:
-        query_parts.append(city)
-    if state:
-        query_parts.append(state)
-    if postal:
-        query_parts.append(postal)
-    
-    search_query = " ".join(query_parts)
-    
-    if not search_query:
-        print("❌ Please enter at least one piece of information")
+    if not hospital_name:
+        print("❌ Please enter a hospital name")
         return show_action_menu()
     
-    print(f"\n1️⃣ Searching Google Places: '{search_query}'")
-    
-    # Try Google search
-    google_results = try_google_search(search_query)
-    
-    if not google_results:
-        print("❌ Google search failed, trying NPPES...")
-        nppes_results = try_nppes_search(hospital_name, city, state, warehouse_dir)
-        
-        if nppes_results:
-            print(f"✅ NPPES search successful: {len(nppes_results)} hospitals found")
-            show_nppes_only_results(nppes_results, warehouse_dir)
-        else:
-            print("❌ No results found")
-        
-        return show_action_menu()
-    
-    print(f"✅ Google: {len(google_results)} hospitals found")
-    
-    # Verify with NPPES
-    print(f"\n2️⃣ Verifying with NPPES...")
-    validated_results = []
-    
-    for google_hospital in google_results:
-        ccn = verify_nppes_for_hospital(google_hospital, warehouse_dir)
-        
-        if ccn:
-            validated_results.append({
-                "google": google_hospital,
-                "ccn": ccn
-            })
-        else:
-            validated_results.append({
-                "google": google_hospital,
-                "ccn": None,
-                "note": "Google only (NPPES unverified)"
-            })
-    
-    print(f"✅ NPPES verification complete: {len([r for r in validated_results if r.get('ccn')])} hospitals verified")
-    
-    # Get CMS data
-    print(f"\n3️⃣ Retrieving CMS quality data...")
-    
-    for result in validated_results:
-        if result.get('ccn'):
-            ccn = result['ccn']
-            cms_data = get_cms_comprehensive_data(ccn, warehouse_dir)
-            result['cms'] = cms_data
-    
-    # Show results - 3번 스타일의 상세 출력 사용
-    print(f"\n" + "="*70)
-    print(f"Search Results: {len(validated_results)} hospitals found")
-    print("="*70 + "\n")
-    
-    # 결과를 3번 스타일 포맷으로 변환
-    from .search_engine import HospitalSearchEngine
+    # Search in local DuckDB
     search_engine = HospitalSearchEngine(warehouse_dir)
     
-    display_results = []
-    for result in validated_results[:10]:
-        google = result['google']
-        ccn = result.get('ccn')
-        
-        if not ccn:
-            continue  # CCN이 없으면 스킵
-        
-        # NPI 조회 (양방향 검증 생략)
-        npi = None
-        try:
-            npi = get_npi_for_hospital(google['name'], None)
-        except Exception:
-            pass
-        
-        # CMS 정보 가져오기
-        cms_info = search_engine.get_cms_rating_with_source(ccn)
-        
-        # 정신병원 체크
-        psych_indicators = None
-        if cms_info.get('rating') is None:
-            psych_indicators = search_engine.get_psychiatric_quality_indicators(ccn)
-        
-        hospital_data = {
-            'facility_name': google['name'],
-            'ccn': ccn,
-            'npi': npi,
-            'npi_verification': None,  # 검증 정보는 더 이상 표시하지 않음
-            'google_address': google.get('address'),
-            'city': None,  # Google 주소 사용
-            'state': None,
-            'zip': None,
-            'cms_rating': cms_info.get('rating'),
-            'cms_source': cms_info.get('source'),
-            'cms_confidence': cms_info.get('confidence'),
-            'cms_reason': cms_info.get('reason'),
-            'psychiatric_indicators': psych_indicators,
-            'google_rating': google.get('rating'),
-            'google_reviews': google.get('user_rating_count'),
-            'distance': float('inf')
-        }
-        
-        display_results.append(hospital_data)
+    try:
+        results = search_engine.search_by_name(hospital_name, state if state else None)
+    except Exception as e:
+        print(f"❌ Search failed: {e}")
+        return show_action_menu()
     
-    # 3번 스타일로 출력
-    _display_hospital_results(display_results, 0)
+    if not results:
+        print(f"❌ No hospitals found matching '{hospital_name}'")
+        if state:
+            print(f"   (Try without state filter or check spelling)")
+        return show_action_menu()
     
-    return show_action_menu()
+    print(f"\n📊 Found {len(results)} hospitals in CMS database")
+    print(f"   (Loading all results)")
+    
+    # User location for distance sorting (optional)
+    user_coords = _get_user_coordinates(
+        ask("\nEnter your location for distance sorting (optional)\nCity", ""),
+        ask("State", "")
+    )
+    
+    # Sorting options
+    print("\nSorting options:")
+    print("1. CMS rating (highest first)")
+    print("2. Google rating (highest first)")
+    print("3. Distance")
+    sort_option = ask("Sort by (1-3)", "1")
+    
+    # CMS rating 정렬 선택 시: 전체 리스트 CMS rating 먼저 로드
+    if sort_option == "1":
+        print(f"\n⏳ Loading CMS ratings for all {len(results)} hospitals...")
+        for i, hospital in enumerate(results, 1):
+            if 'cms_rating' not in hospital:
+                info = search_engine.get_cms_rating_with_source(hospital['ccn'])
+                hospital['cms_rating'] = info.get('rating')
+                hospital['cms_source'] = info.get('source')
+                hospital['cms_confidence'] = info.get('confidence')
+                hospital['cms_reason'] = info.get('reason')
+            
+            # 진행 상황 표시 (10개마다)
+            if i % 10 == 0 or i == len(results):
+                print(f"  Progress: {i}/{len(results)}")
+        
+        print("✅ CMS ratings loaded!")
+    
+    # Pagination
+    page_size = 20
+    current_page = 0
+    google_fetched_up_to = 0
+    
+    while True:
+        start_idx = current_page * page_size
+        end_idx = start_idx + page_size
+        
+        if start_idx >= len(results):
+            print("📋 This is the last page.")
+            current_page = max(0, current_page - 1)
+            continue
+        
+        page_results = results[start_idx:end_idx]
+        
+        # Enrich with Google data (only for current page)
+        if start_idx >= google_fetched_up_to:
+            _enrich_hospital_data(
+                results, start_idx, end_idx,
+                page_results, google_fetched_up_to,
+                search_engine, "", state or "", user_coords
+            )
+            google_fetched_up_to = max(google_fetched_up_to, end_idx)
+        
+        # Sort entire list (전체 리스트 정렬 - 3번과 동일)
+        if sort_option == "1":
+            results = sorted(results,
+                key=lambda x: (x.get('cms_rating') is None, -(x.get('cms_rating') or 0)))
+        elif sort_option == "2":
+            results = sorted(results,
+                key=lambda x: (x.get('google_rating') is None, -(x.get('google_rating') or 0)))
+        elif sort_option == "3" and user_coords:
+            results = sorted(results, key=lambda x: x.get('distance', float('inf')))
+        
+        # 재정렬된 리스트에서 페이지 다시 가져오기
+        page_results = results[start_idx:end_idx]
+        
+        # Display results
+        _display_hospital_results(page_results, start_idx)
+        
+        # Pagination menu
+        if end_idx >= len(results):
+            # Last page
+            print("\n" + "-"*70)
+            print("What would you like to do?")
+            print("1. Go back")
+            print("2. Exit")
+            print("-"*70)
+            
+            choice = ask("Select (1-2)", "1")
+            
+            if choice == "1":
+                return "back"
+            elif choice == "2":
+                return "exit"
+        else:
+            # More pages available
+            print("\n" + "-"*70)
+            print("What would you like to do?")
+            print("1. Load more")
+            print("2. Go back")
+            print("3. Exit")
+            print("-"*70)
+            
+            choice = ask("Select (1-3)", "2")
+            
+            if choice == "1":
+                current_page += 1
+            elif choice == "2":
+                return "back"
+            elif choice == "3":
+                return "exit"
 
 
 def try_google_search(query: str) -> List[Dict]:
     """Try to search Google Places using free_provider_apis"""
     try:
-        # 오프라인 모드면 바로 우회
+        # Skip if offline mode
         if os.getenv("FREE_APIS_OFFLINE") == "1":
             return []
         import sys
@@ -301,7 +299,7 @@ def try_google_search(query: str) -> List[Dict]:
 def try_nppes_search(name: str, city: str, state: str, warehouse_dir: str) -> List[Dict]:
     """Search NPPES directly when Google fails"""
     try:
-        # 오프라인 모드면 DuckDB 로컬 탐색으로 바로 우회
+        # Skip to DuckDB local search if offline mode
         if os.getenv("FREE_APIS_OFFLINE") == "1":
             from .search_engine import HospitalSearchEngine
             search_engine = HospitalSearchEngine(warehouse_dir)
@@ -394,16 +392,16 @@ def try_nppes_search(name: str, city: str, state: str, warehouse_dir: str) -> Li
 
 def calculate_name_similarity(name1: str, name2: str) -> float:
     """
-    두 병원명의 유사도 계산 (0.0 ~ 1.0)
+    Calculate similarity between two hospital names (0.0 ~ 1.0)
     """
     if not name1 or not name2:
         return 0.0
     
-    # 소문자 변환 및 공통 단어 제거
+    # Convert to lowercase and remove common words
     n1 = name1.lower().replace('hospital', '').replace('medical center', '').replace('health system', '').strip()
     n2 = name2.lower().replace('hospital', '').replace('medical center', '').replace('health system', '').strip()
     
-    # 단어 집합으로 비교
+    # Compare using word sets
     words1 = set(n1.split())
     words2 = set(n2.split())
     
@@ -419,7 +417,7 @@ def calculate_name_similarity(name1: str, name2: str) -> float:
 
 def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> Dict[str, Any]:
     """
-    NPI와 CCN이 같은 병원을 가리키는지 양방향 검증
+    Bidirectional verification if NPI and CCN refer to the same hospital
     
     Returns:
         {
@@ -441,7 +439,7 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
     }
     
     try:
-        # Offline 모드이면 검증 불가
+        # Cannot verify in offline mode
         if os.getenv("FREE_APIS_OFFLINE") == "1":
             result["warnings"].append("Offline mode - verification skipped")
             return result
@@ -473,7 +471,7 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
         nppes_client = NPPESClient()
         cms_pdc_client = CMSPDCClient()
         
-        # 1. NPI → CCN 검증 (CMS PDC API 사용)
+        # 1. NPI → CCN verification (using CMS PDC API)
         ccn_match = False
         try:
             affiliations = cms_pdc_client.get_hospital_affiliations_by_npi(npi)
@@ -487,7 +485,7 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
         except Exception as e:
             result["warnings"].append(f"CMS PDC lookup failed: {str(e)[:50]}")
         
-        # 2. NPI로 NPPES에서 병원명 조회
+        # 2. Look up hospital name from NPPES using NPI
         try:
             nppes_result = nppes_client.search(npi=npi, limit=1)
             items = NPPESClient.normalize(nppes_result)
@@ -496,15 +494,15 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
                 npi_name = items[0].get("organization_name") or items[0].get("name")
                 result["npi_name"] = npi_name
                 
-                # 이름 유사도 계산
+                # Calculate name similarity
                 if npi_name:
                     similarity = calculate_name_similarity(npi_name, facility_name)
                     result["match_score"] = similarity
                     
-                    # 이미 CCN 매칭이 확인되었으면 high
+                    # If CCN matching is already confirmed, set to high
                     if ccn_match:
                         result["confidence"] = "high"
-                    # CCN 매칭은 실패했지만 이름이 매우 유사하면 medium
+                    # If CCN matching failed but names are very similar, set to medium
                     elif similarity >= 0.7:
                         result["verified"] = True
                         result["confidence"] = "medium"
@@ -526,13 +524,13 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
 
 def get_npi_for_hospital(facility_name: str, state: Optional[str] = None) -> Optional[str]:
     """
-    병원명과 주로 NPPES에서 NPI 번호를 조회
+    Look up NPI number from NPPES using hospital name and state
     
     Returns:
-        NPI 번호 (문자열) 또는 None
+        NPI number (string) or None
     """
     try:
-        # Offline 모드이거나 free_apis가 없으면 None 반환
+        # Return None if offline mode or free_apis is not available
         if os.getenv("FREE_APIS_OFFLINE") == "1":
             return None
         
@@ -561,7 +559,7 @@ def get_npi_for_hospital(facility_name: str, state: Optional[str] = None) -> Opt
         
         nppes_client = NPPESClient()
         
-        # NPPES에서 병원명으로 검색
+        # Search NPPES by hospital name
         search_params = {"organization_name": facility_name, "limit": 3}
         if state:
             search_params["state"] = state
@@ -569,7 +567,7 @@ def get_npi_for_hospital(facility_name: str, state: Optional[str] = None) -> Opt
         nppes_result = nppes_client.search(**search_params)
         items = NPPESClient.normalize(nppes_result)
         
-        # 첫 번째 매치를 반환 (이름이 가장 유사한 것)
+        # Return first match (most similar name)
         if items:
             return items[0].get("npi")
         
@@ -696,7 +694,7 @@ def get_cms_comprehensive_data(ccn: str, warehouse_dir: str) -> Dict:
     
     hospital_info = search_engine.get_by_ccn(ccn)
     
-    # 공식/예측/추정 순서로 출처 포함 조회
+    # Fetch rating with source (official/predicted/estimated)
     rating_info = search_engine.get_cms_rating_with_source(ccn)
     rating = rating_info.get('rating')
     source = rating_info.get('source')
@@ -730,7 +728,7 @@ def show_nppes_only_results(results: List[Dict], warehouse_dir: str) -> None:
     print(f"NPPES Search Results: {len(results)} hospitals")
     print("="*70 + "\n")
     
-    # 3번 스타일로 출력하기 위해 데이터 변환
+    # Display in option 3 style하기 위해 데이터 변환
     from .search_engine import HospitalSearchEngine
     search_engine = HospitalSearchEngine(warehouse_dir)
     
@@ -738,17 +736,17 @@ def show_nppes_only_results(results: List[Dict], warehouse_dir: str) -> None:
     for hospital in results[:10]:
         ccn = hospital['ccn']
         
-        # NPI 조회 (양방향 검증 생략)
+        # NPI lookup (skip bidirectional verification)
         npi = None
         try:
             npi = get_npi_for_hospital(hospital['facility_name'], hospital.get('state'))
         except Exception:
             pass
         
-        # CMS 정보 가져오기
+        # Fetch CMS information
         cms_info = search_engine.get_cms_rating_with_source(ccn)
         
-        # 정신병원 체크
+        # Check for psychiatric hospital
         psych_indicators = None
         if cms_info.get('rating') is None:
             psych_indicators = search_engine.get_psychiatric_quality_indicators(ccn)
@@ -774,7 +772,7 @@ def show_nppes_only_results(results: List[Dict], warehouse_dir: str) -> None:
         
         display_results.append(hospital_data)
     
-    # 3번 스타일로 출력
+    # Display in option 3 style
     _display_hospital_results(display_results, 0)
     
     if len(results) > 0:
@@ -800,13 +798,13 @@ def show_detailed_analysis_for_ccn(ccn: str, warehouse_dir: str) -> None:
         if cms_data.get('is_predicted'):
             prediction_info = cms_data.get('prediction_info', {})
             confidence = cms_data.get('confidence') or prediction_info.get('confidence')
-            conf_text = f", 신뢰도: {confidence:.1%}" if confidence is not None else ""
-            print(f"  - CMS Quality: ⭐ {rating}/5.0 (AI 예측{conf_text})")
+            conf_text = f", Confidence: {confidence:.1%}" if confidence is not None else ""
+            print(f"  - CMS Quality: ⭐ {rating}/5.0 (AI Predicted{conf_text})")
             
-            # 예측 상세 정보 표시 (선택적)
+            # Show detailed prediction info (optional)
             if prediction_info.get('markov_prediction') and prediction_info.get('regression_prediction'):
-                print(f"    • Markov 예측: {prediction_info['markov_prediction']:.2f}")
-                print(f"    • Regression 예측: {prediction_info['regression_prediction']:.2f}")
+                print(f"    • Markov Prediction: {prediction_info['markov_prediction']:.2f}")
+                print(f"    • Regression Prediction: {prediction_info['regression_prediction']:.2f}")
         elif cms_data.get('is_estimated'):
             print(f"  - CMS Quality: ⭐ {rating}/5.0 (Estimated)")
         else:
@@ -819,7 +817,7 @@ def show_detailed_analysis_for_ccn(ccn: str, warehouse_dir: str) -> None:
     # 각 도메인의 기여도 계산 및 표시
     domain_contributions = calculate_domain_contributions(metrics, rating)
     if domain_contributions:
-        print("📊 Domain Contributions (별점 구성 요소 비중)")
+        print("📊 Domain Contributions")
         for domain, percentage in sorted(domain_contributions.items(), key=lambda x: x[1], reverse=True):
             print(f"  - {domain}: {percentage:.1f}%")
         print()
@@ -845,29 +843,29 @@ def show_detailed_analysis_for_ccn(ccn: str, warehouse_dir: str) -> None:
 
 def calculate_domain_contributions(metrics: Dict, rating: Optional[float]) -> Dict[str, float]:
     """
-    각 도메인이 별점에 기여하는 비중 계산 (퍼센트)
+    Calculate percentage contribution of each domain to the star rating
     
-    CMS 별점은 5개 도메인으로 구성되며, 각 도메인의 가중치는 다음과 같습니다:
-    - Mortality (사망률): 22%
-    - Readmission (재발율): 22%
-    - Safety (안전): 22%
-    - PatientExperience (환자 경험): 22%
-    - Timely (시기 적절성): 12%
+    CMS star rating consists of 5 domains with the following weights:
+    - Mortality: 22%
+    - Readmission: 22%
+    - Safety: 22%
+    - PatientExperience: 22%
+    - Timely: 12%
     
-    실제 데이터 유무와 성과를 고려하여 조정합니다.
+    Adjusted based on actual data availability and performance.
     
     Args:
-        metrics: 각 도메인의 메트릭 데이터
-        rating: CMS 별점 (1-5)
+        metrics: Metric data for each domain
+        rating: CMS star rating (1-5)
     
     Returns:
-        {domain: percentage} 형태의 딕셔너리 (합계 100%)
+        Dictionary of {domain: percentage} (total 100%)
     """
     if not metrics:
         return {}
     
-    # CMS 공식 별점 계산 가중치 (실제 CMS 기준)
-    # 참고: CMS는 복잡한 계산식을 사용하지만, 일반적으로는 다음과 같은 비중
+    # CMS official star rating calculation weights (based on actual CMS criteria)
+    # Note: CMS uses complex formulas, but generally uses the following weights
     base_weights = {
         "Mortality": 0.22,           # 22%
         "Readmission": 0.22,         # 22%
@@ -1118,6 +1116,23 @@ def _search_by_location_full(warehouse_dir: str, search_engine, city: str,
     print("3. Distance")
     sort_option = ask("Sort by (1-3)", "1")
     
+    # CMS rating 정렬 선택 시: 전체 리스트 CMS rating 먼저 로드
+    if sort_option == "1":
+        print(f"\n⏳ Loading CMS ratings for all {len(all_results)} hospitals...")
+        for i, hospital in enumerate(all_results, 1):
+            if 'cms_rating' not in hospital:
+                info = search_engine.get_cms_rating_with_source(hospital['ccn'])
+                hospital['cms_rating'] = info.get('rating')
+                hospital['cms_source'] = info.get('source')
+                hospital['cms_confidence'] = info.get('confidence')
+                hospital['cms_reason'] = info.get('reason')
+            
+            # 진행 상황 표시 (50개마다)
+            if i % 50 == 0:
+                print(f"  Progress: {i}/{len(all_results)}")
+        
+        print("✅ CMS ratings loaded!")
+    
     # 페이지네이션 상태
     page_size = 20
     current_page = 0
@@ -1128,7 +1143,7 @@ def _search_by_location_full(warehouse_dir: str, search_engine, city: str,
         end_idx = start_idx + page_size
         
         if start_idx >= len(all_results):
-            print("📋 마지막 페이지입니다.")
+            print("📋 This is the last page.")
             current_page = max(0, current_page - 1)
             continue
         
@@ -1161,16 +1176,16 @@ def _search_by_location_full(warehouse_dir: str, search_engine, city: str,
         # 메뉴
         print("\n" + "-"*70)
         print("What would you like to do?")
-        print("1. 더 보기")
-        print("2. 뒤로가기")
-        print("3. 나가기")
+        print("1. Load more")
+        print("2. Go back")
+        print("3. Exit")
         print("-"*70)
         
         choice = ask("Select (1-3)", "2")
         
         if choice == "1":
             if end_idx >= len(all_results):
-                print("📋 마지막 페이지입니다.")
+                print("📋 This is the last page.")
                 continue
             current_page += 1
         elif choice == "2":
@@ -1204,7 +1219,7 @@ def _search_by_location_paginated(warehouse_dir: str, search_engine, city: str,
         offset = current_page * page_size
         
         if offset >= total_count:
-            print("📋 마지막 페이지입니다.")
+            print("📋 This is the last page.")
             current_page = max(0, current_page - 1)
             continue
         
@@ -1214,7 +1229,7 @@ def _search_by_location_paginated(warehouse_dir: str, search_engine, city: str,
         )
         
         if not page_results:
-            print("더 이상 결과가 없습니다.")
+            print("No more results available.")
             break
         
         # CMS 정보 및 Google 정보 수집
@@ -1230,16 +1245,16 @@ def _search_by_location_paginated(warehouse_dir: str, search_engine, city: str,
         # 메뉴
         print("\n" + "-"*70)
         print("What would you like to do?")
-        print("1. 더 보기")
-        print("2. 뒤로가기")
-        print("3. 나가기")
+        print("1. Load more")
+        print("2. Go back")
+        print("3. Exit")
         print("-"*70)
         
         choice = ask("Select (1-3)", "2")
         
         if choice == "1":
             if offset + page_size >= total_count:
-                print("📋 마지막 페이지입니다.")
+                print("📋 This is the last page.")
                 continue
             current_page += 1
         elif choice == "2":
@@ -1315,7 +1330,7 @@ def _enrich_hospital_data(page_results: List, start_idx: int, end_idx: int,
             
             # 특수 병원 확인 (CMS 별점이 없는 경우)
             if rating is None:
-                # 정신병원 체크
+                # Check for psychiatric hospital
                 psych_indicators = search_engine.get_psychiatric_quality_indicators(hospital['ccn'])
                 hospital['psychiatric_indicators'] = psych_indicators
                 
@@ -1376,12 +1391,19 @@ def _display_hospital_results(results: List, start_idx: int):
     
     for i, hospital in enumerate(results, start_idx + 1):
         print(f"{i}. {hospital['facility_name']}")
-        print(f"   CCN: {hospital['ccn']}")
+        # CCN 표시 (없으면 Not available)
+        ccn = hospital.get('ccn')
+        if ccn:
+            print(f"   CCN: {ccn}")
+        else:
+            print(f"   CCN: Not available")
         
-        # NPI 표시 (검증된 것만, 아이콘 없이)
+        # NPI 표시 (없으면 Not available)
         npi = hospital.get('npi')
         if npi:
             print(f"   NPI: {npi}")
+        else:
+            print(f"   NPI: Not available")
         
         # 주소 표시 (Google 주소가 있으면 우선 사용, 없으면 CMS 데이터 사용)
         google_address = hospital.get('google_address')
@@ -1429,7 +1451,7 @@ def _display_hospital_results(results: List, start_idx: int):
                 stars = "⭐" * int(cms_rating)
                 if source == 'predicted':
                     conf = hospital.get('cms_confidence')
-                    conf_text = f", 신뢰도: {conf:.0%}" if conf is not None else ""
+                    conf_text = f", Confidence: {conf:.0%}" if conf is not None else ""
                     tag = f" (AI Predicted{conf_text})"
                 elif source == 'estimated':
                     tag = " (Estimated)"
@@ -1439,7 +1461,11 @@ def _display_hospital_results(results: List, start_idx: int):
                     tag = ""
                 print(f"   CMS Rating: {stars} {cms_rating:.1f}/5.0{tag}")
             else:
-                reason = hospital.get('cms_reason') or 'N/A'
+                reason = hospital.get('cms_reason')
+                if not hospital.get('ccn'):
+                    reason = 'No CCN found'
+                elif not reason:
+                    reason = 'Data not available'
                 print(f"   CMS Rating: N/A ({reason})")
         
         google_rating = hospital.get('google_rating')
@@ -1448,6 +1474,8 @@ def _display_hospital_results(results: List, start_idx: int):
             stars = "⭐" * int(google_rating)
             review_text = f" ({review_count} reviews)" if review_count > 0 else ""
             print(f"   Google Rating: {stars} {google_rating:.1f}/5.0{review_text}")
+        elif google_rating is None:
+            print(f"   Google Rating: Not available")
         else:
             print("   Google Rating: N/A")
         
@@ -1466,12 +1494,12 @@ def _display_hospital_results(results: List, start_idx: int):
                     alerts = []
             
             if alerts:
-                print(f"   ⚠️ 주의 지표:")
+                print(f"   ⚠️ Risk Indicators:")
                 for alert in alerts:
                     msg = alert['message']
                     # 메시지에 이미 국가 평균 정보가 포함되어 있음
                     print(f"      • {msg}")
-                print(f"   ℹ️ 참고: 대형 병원은 중증 환자를 더 많이 받아 지표가 높을 수 있습니다.")
+                print(f"   ℹ️ Note: Large hospitals may have higher risk indicators due to treating more severe cases.")
         
         # 별점 불일치 분석
         cms_rating = hospital.get('cms_rating')
@@ -1479,13 +1507,13 @@ def _display_hospital_results(results: List, start_idx: int):
             diff = abs(cms_rating - google_rating)
             
             if diff >= 2.0:
-                print(f"   ℹ️ Google과 CMS 별점 차이가 큽니다 ({diff:.1f}점)")
+                print(f"   ℹ️ Significant difference between Google and CMS ratings ({diff:.1f} points)")
                 if review_count < 20:
-                    print(f"      Google 리뷰 수가 적어 ({review_count}개) 대표성이 낮을 수 있습니다.")
+                    print(f"      Low Google review count ({review_count}) may not be representative.")
                 else:
-                    print(f"      두 지표는 다른 측면을 측정합니다. 함께 참고하세요.")
+                    print(f"      These ratings measure different aspects. Please consider both.")
             elif diff >= 1.0:
-                print(f"   ℹ️ Google과 CMS 별점에 다소 차이가 있습니다 ({diff:.1f}점)")
+                print(f"   ℹ️ Moderate difference between Google and CMS ratings ({diff:.1f} points)")
         
         if hospital.get('distance') and hospital['distance'] != float('inf'):
             print(f"   Distance: {hospital['distance']:.1f} miles")
@@ -1564,8 +1592,30 @@ def search_by_specialty(warehouse_dir: str) -> str:
         if city:
             search_params['city'] = city
         
-        raw_result = nppes_client.search(**search_params, limit=100)  # 더 많이 가져오기
-        items = NPPESClient.normalize(raw_result)
+        # Pagination: 100개씩 최대 1000개까지 수집
+        print("🔍 Searching NPPES database...")
+        all_items = []
+        skip = 0
+        max_results = 1000
+        
+        while skip < max_results:
+            print(f"  Fetching results {skip+1}-{skip+100}...")
+            
+            raw_result = nppes_client.search(**search_params, limit=100, skip=skip)
+            batch = NPPESClient.normalize(raw_result)
+            
+            if not batch:
+                # 더 이상 결과가 없음
+                break
+            
+            all_items.extend(batch)
+            skip += 100
+            
+            if len(batch) < 100:
+                # 마지막 페이지 (100개 미만)
+                break
+        
+        items = all_items
         
         if not items:
             print("❌ No results found")
@@ -1603,38 +1653,82 @@ def search_by_specialty(warehouse_dir: str) -> str:
         print("3. Distance")
         sort_option = ask("Sort by (1-3)", "1")
         
+        # CMS rating 정렬 선택 시: 전체 리스트 CCN 먼저 매칭
+        if sort_option == "1":
+            print(f"\n⏳ Resolving CCN for all {len(nppes_items)} organizations...")
+            print("   This may take a minute...")
+            
+            for i, item in enumerate(nppes_items, 1):
+                if item.get('ccn') is not None:
+                    continue  # 이미 변환됨
+                
+                name = item.get('facility_name')
+                item_state = item.get('state')
+                
+                ccn = None
+                if name:
+                    try:
+                        local_results = search_engine.search_by_name(name, item_state)
+                        if local_results:
+                            ccn = local_results[0]['ccn']
+                    except Exception:
+                        pass
+                
+                item['ccn'] = ccn
+                
+                # 진행 상황 표시 (100개마다)
+                if i % 100 == 0:
+                    print(f"  Progress: {i}/{len(nppes_items)}")
+            
+            # CCN 있는 병원만 카운트
+            ccn_count = len([h for h in nppes_items if h.get('ccn')])
+            print(f"✅ CCN matching completed: {ccn_count}/{len(nppes_items)} have CMS data")
+            
+            # CMS rating 가져오기 (CCN 있는 것만)
+            print("⏳ Loading CMS ratings...")
+            for item in nppes_items:
+                if item.get('ccn'):
+                    rating_info = search_engine.get_cms_rating_with_source(item['ccn'])
+                    item['cms_rating'] = rating_info.get('rating')
+                    item['cms_source'] = rating_info.get('source')
+                    item['cms_confidence'] = rating_info.get('confidence')
+                    item['cms_reason'] = rating_info.get('reason')
+            
+            print("✅ CMS data loaded!")
+        
         # 페이지네이션
         page_size = 20
         current_page = 0
         google_fetched_up_to = 0
-        ccn_resolved_up_to = 0  # CCN 변환된 마지막 인덱스
+        ccn_resolved_up_to = len(nppes_items) if sort_option == "1" else 0  # CMS 정렬이면 이미 완료
         
         while True:
             start_idx = current_page * page_size
             end_idx = start_idx + page_size
             
             if start_idx >= len(nppes_items):
-                print("📋 마지막 페이지입니다.")
+                print("📋 This is the last page.")
                 current_page = max(0, current_page - 1)
                 continue
             
             page_results = nppes_items[start_idx:end_idx]
             
-            # 페이지별 CCN 변환 (아직 변환 안 된 것만)
-            if start_idx >= ccn_resolved_up_to:
+            # 페이지별 CCN 변환 (아직 변환 안 된 것만, CMS 정렬이 아닌 경우만)
+            if sort_option != "1" and start_idx >= ccn_resolved_up_to:
                 print(f"📊 Resolving CCN for items {start_idx+1}-{min(end_idx, len(nppes_items))}...")
                 
                 for i, item in enumerate(page_results, 1):
-                    if item.get('ccn'):
+                    if item.get('ccn') is not None:
                         continue  # 이미 변환됨
                     
                     name = item.get('facility_name')
+                    item_state = item.get('state')
                     
                     # 로컬 DuckDB에서 이름으로 CCN 검색 (빠름)
                     ccn = None
                     if name:
                         try:
-                            local_results = search_engine.search_by_name(name, state)
+                            local_results = search_engine.search_by_name(name, item_state)
                             if local_results:
                                 ccn = local_results[0]['ccn']
                         except Exception:
@@ -1642,61 +1736,64 @@ def search_by_specialty(warehouse_dir: str) -> str:
                     
                     item['ccn'] = ccn
                     
-                    # 진행 상황 표시 (10개마다)
+                    # 진행 상황 표시 (5개마다)
                     if i % 5 == 0:
                         print(f"  Progress: {i}/{len(page_results)}")
                 
                 ccn_resolved_up_to = max(ccn_resolved_up_to, end_idx)
             
-            # CCN이 있는 병원만 필터링
-            valid_results = [h for h in page_results if h.get('ccn')]
+            # 모든 결과 표시 (CCN 필터링 제거 - 1번, 3번과 동일)
+            page_results_to_show = page_results
             
-            if not valid_results:
-                print(f"⚠️ No valid hospitals with CCN found in this page")
-                current_page += 1
-                continue
+            # CCN 있는 것만 카운트 (정보 표시용)
+            ccn_count = len([h for h in page_results if h.get('ccn')])
+            if ccn_count > 0:
+                print(f"ℹ️ This page: {len(page_results)} organizations ({ccn_count} with CMS data)")
+            else:
+                print(f"ℹ️ This page: {len(page_results)} organizations (showing NPPES data only)")
             
-            print(f"✅ Found {len(valid_results)} hospitals with CCN")
+            # Google enrichment (현재 페이지만 - 1번, 3번과 동일)
+            if start_idx >= google_fetched_up_to:
+                _enrich_hospital_data(
+                    page_results_to_show, 0, len(page_results_to_show),
+                    page_results_to_show, 0,
+                    search_engine, city or "", state or "", user_coords
+                )
+                google_fetched_up_to = max(google_fetched_up_to, end_idx)
             
-            # 1번, 3번과 동일: _enrich_hospital_data 사용
-            _enrich_hospital_data(
-                valid_results, 0, len(valid_results),
-                valid_results, google_fetched_up_to,
-                search_engine, city or "", state or "", user_coords
-            )
-            google_fetched_up_to = len(valid_results)
-            
-            # 정렬
+            # 정렬 (전체 리스트 기준 - 1번과 동일)
             if sort_option == "1":
-                valid_results = sorted(valid_results,
+                nppes_items = sorted(nppes_items,
                     key=lambda x: (x.get('cms_rating') is None, -(x.get('cms_rating') or 0)))
             elif sort_option == "2":
-                valid_results = sorted(valid_results,
+                nppes_items = sorted(nppes_items,
                     key=lambda x: (x.get('google_rating') is None, -(x.get('google_rating') or 0)))
             elif sort_option == "3":
-                valid_results = sorted(valid_results,
+                nppes_items = sorted(nppes_items,
                     key=lambda x: x.get('distance', float('inf')))
+            
+            # 재정렬된 리스트에서 페이지 다시 가져오기 (1번과 동일)
+            page_results_to_show = nppes_items[start_idx:end_idx]
             
             # 결과 출력 (1번, 3번과 동일)
             print(f"\nShowing {start_idx+1}-{min(end_idx, len(nppes_items))} of {len(nppes_items)} organizations")
-            print(f"({len(valid_results)} hospitals with CCN)")
             print("="*70 + "\n")
             
-            _display_hospital_results(valid_results, 0)
+            _display_hospital_results(page_results_to_show, start_idx)
             
             # 메뉴
             print("\n" + "-"*70)
             print("What would you like to do?")
-            print("1. 더 보기")
-            print("2. 뒤로가기")
-            print("3. 나가기")
+            print("1. Load more")
+            print("2. Go back")
+            print("3. Exit")
             print("-"*70)
             
             choice = ask("Select (1-3)", "2")
             
             if choice == "1":
                 if end_idx >= len(nppes_items):
-                    print("📋 마지막 페이지입니다.")
+                    print("📋 This is the last page.")
                     continue
                 current_page += 1
             elif choice == "2":

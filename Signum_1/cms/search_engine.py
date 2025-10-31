@@ -1,5 +1,5 @@
 """
-Hospital Search Engine - 병원명/주소로 CCN 검색
+Hospital Search Engine - Search CCN by hospital name/address
 """
 from __future__ import annotations
 import os
@@ -9,7 +9,7 @@ from .constants import DEFAULT_WAREHOUSE_DIR
 
 
 class HospitalSearchEngine:
-    """병원명/주소로 CCN 검색 엔진"""
+    """Search engine for CCN lookup by hospital name/address"""
     
     def __init__(self, warehouse_dir: Optional[str] = None):
         self.warehouse_dir = warehouse_dir or DEFAULT_WAREHOUSE_DIR
@@ -17,11 +17,11 @@ class HospitalSearchEngine:
     
     def search_by_name(self, name: str, state: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        병원명으로 검색
+        Search by hospital name
         
         Args:
-            name: 병원명 (예: "Mayo Clinic")
-            state: 주 코드 (예: "MN") - 선택사항
+            name: Hospital name (e.g., "Mayo Clinic")
+            state: State code (e.g., "MN") - optional
         
         Returns:
             [{"ccn": "...", "facility_name": "...", "state": "...", "city": "...", ...}]
@@ -31,12 +31,12 @@ class HospitalSearchEngine:
         
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            # 병원명으로 유사 검색
-            params = [f"%{name}%"]
+            # Fuzzy search by hospital name (case-insensitive)
+            params = [f"%{name.upper()}%"]
             query = """
                 SELECT DISTINCT ccn, facility_name, state, city, zip
                 FROM hospital_star 
-                WHERE facility_name LIKE ?
+                WHERE UPPER(facility_name) LIKE ?
             """
             
             if state:
@@ -47,13 +47,13 @@ class HospitalSearchEngine:
             
             df = con.execute(query, params).df()
 
-            # 폴백: hospital_star에서 결과가 없으면 hospital_metrics에서 후보 추출
+            # Fallback: if no results from hospital_star, extract candidates from hospital_metrics
             if df.empty:
-                params_fb = [f"%{name}%"]
+                params_fb = [f"%{name.upper()}%"]
                 query_fb = """
                     SELECT DISTINCT ccn, facility_name, state, city, zip
                     FROM hospital_metrics
-                    WHERE facility_name LIKE ?
+                    WHERE UPPER(facility_name) LIKE ?
                 """
                 if state:
                     query_fb += " AND state = ?"
@@ -77,17 +77,17 @@ class HospitalSearchEngine:
             con.close()
     
     def count_hospitals_by_address(self, city: str, state: Optional[str] = None) -> int:
-        """병원 수 카운트 (빠른 조회용)"""
+        """Count hospitals (for quick lookup)"""
         if not os.path.exists(self.db_path):
             return 0
         
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            params = [f"%{city}%"]
+            params = [f"%{city.upper()}%"]
             query = """
                 SELECT COUNT(DISTINCT ccn) as cnt
                 FROM hospital_star 
-                WHERE city LIKE ?
+                WHERE UPPER(city) LIKE ?
             """
             
             if state:
@@ -97,13 +97,13 @@ class HospitalSearchEngine:
             result = con.execute(query, params).fetchone()
             count = result[0] if result else 0
             
-            # 폴백: hospital_star에 결과가 없으면 hospital_metrics 확인
+            # Fallback: if no results from hospital_star, check hospital_metrics
             if count == 0:
-                params_fb = [f"%{city}%"]
+                params_fb = [f"%{city.upper()}%"]
                 query_fb = """
                     SELECT COUNT(DISTINCT ccn) as cnt
                     FROM hospital_metrics 
-                    WHERE city LIKE ?
+                    WHERE UPPER(city) LIKE ?
                 """
                 if state:
                     query_fb += " AND state = ?"
@@ -117,24 +117,24 @@ class HospitalSearchEngine:
             con.close()
     
     def search_by_address(self, city: str, state: Optional[str] = None) -> List[Dict[str, Any]]:
-        """주소로 검색 (전체 결과, 정렬됨)"""
+        """Search by address (all results, sorted)"""
         if not os.path.exists(self.db_path):
             return []
         
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            params = [f"%{city}%"]
+            params = [f"%{city.upper()}%"]
             query = """
                 SELECT DISTINCT ccn, facility_name, state, city, zip, star_rating
                 FROM hospital_star 
-                WHERE city LIKE ?
+                WHERE UPPER(city) LIKE ?
             """
             
             if state:
                 query += " AND state = ?"
                 params.append(state)
             
-            # 별점으로 정렬: NULL은 맨 아래, 나머지는 5->1 순서
+            # Sort by rating: NULL at bottom, rest in 5->1 order
             query += """
                 ORDER BY 
                     CASE WHEN star_rating IS NULL THEN 1 ELSE 0 END,
@@ -144,13 +144,13 @@ class HospitalSearchEngine:
             
             df = con.execute(query, params).df()
 
-            # 폴백: hospital_star에서 결과가 없으면 hospital_metrics에서 후보 추출
+            # Fallback: if no results from hospital_star, extract candidates from hospital_metrics
             if df.empty:
-                params_fb = [f"%{city}%"]
+                params_fb = [f"%{city.upper()}%"]
                 query_fb = """
                     SELECT DISTINCT ccn, facility_name, state, city, zip
                     FROM hospital_metrics 
-                    WHERE city LIKE ?
+                    WHERE UPPER(city) LIKE ?
                 """
                 if state:
                     query_fb += " AND state = ?"
@@ -175,24 +175,24 @@ class HospitalSearchEngine:
     
     def search_by_address_paginated(self, city: str, state: Optional[str] = None, 
                                      limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
-        """주소로 검색 (페이지별, OFFSET/LIMIT 사용)"""
+        """Search by address (paginated, using OFFSET/LIMIT)"""
         if not os.path.exists(self.db_path):
             return []
         
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            params = [f"%{city}%"]
+            params = [f"%{city.upper()}%"]
             query = """
                 SELECT DISTINCT ccn, facility_name, state, city, zip, star_rating
                 FROM hospital_star 
-                WHERE city LIKE ?
+                WHERE UPPER(city) LIKE ?
             """
             
             if state:
                 query += " AND state = ?"
                 params.append(state)
             
-            # 별점으로 정렬: NULL은 맨 아래, 나머지는 5->1 순서
+            # Sort by rating: NULL at bottom, rest in 5->1 order
             query += """
                 ORDER BY 
                     CASE WHEN star_rating IS NULL THEN 1 ELSE 0 END,
@@ -204,13 +204,13 @@ class HospitalSearchEngine:
             
             df = con.execute(query, params).df()
 
-            # 폴백: hospital_star에서 결과가 없으면 hospital_metrics에서 후보 추출
+            # Fallback: if no results from hospital_star, extract candidates from hospital_metrics
             if df.empty and offset == 0:
-                params_fb = [f"%{city}%"]
+                params_fb = [f"%{city.upper()}%"]
                 query_fb = """
                     SELECT DISTINCT ccn, facility_name, state, city, zip
                     FROM hospital_metrics 
-                    WHERE city LIKE ?
+                    WHERE UPPER(city) LIKE ?
                 """
                 if state:
                     query_fb += " AND state = ?"
@@ -235,7 +235,7 @@ class HospitalSearchEngine:
             con.close()
     
     def get_by_ccn(self, ccn: str) -> Optional[Dict[str, Any]]:
-        """CCN으로 정확히 찾기"""
+        """Find exact match by CCN"""
         if not os.path.exists(self.db_path):
             return None
         
@@ -259,7 +259,7 @@ class HospitalSearchEngine:
                     "zip": row.get('zip')
                 }
 
-            # 폴백: hospital_metrics에서 조회
+            # Fallback: lookup from hospital_metrics
             query_fb = """
                 SELECT ccn, facility_name, state, city, zip
                 FROM hospital_metrics 
@@ -284,24 +284,24 @@ class HospitalSearchEngine:
     
     def get_latest_star_rating(self, ccn: str, use_prediction: bool = True, use_estimated: bool = True) -> Optional[float]:
         """
-        최신 별점 가져오기
+        Get latest star rating
         
         Args:
-            ccn: 병원 CCN
-            use_prediction: 공식 별점이 없으면 예측 별점 사용 여부
+            ccn: Hospital CCN
+            use_prediction: Whether to use predicted rating if official rating is unavailable
         
         Returns:
-            별점 (1.0-5.0) 또는 None
+            Star rating (1.0-5.0) or None
         """
         if not os.path.exists(self.db_path):
             return None
         
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            # 먼저 테이블 존재 확인
+            # First check if table exists
             tables = con.execute("SHOW TABLES").df()['name'].tolist()
             
-            # 공식 별점 확인
+            # Check official rating
             if 'hospital_star' in tables:
                 query = """
                     SELECT star_rating, release
@@ -314,11 +314,11 @@ class HospitalSearchEngine:
                 
                 if not df.empty:
                     rating = float(df.iloc[0]['star_rating'])
-                    # 별점은 1-5 사이여야 함 (유효성 검사)
+                    # Star rating must be between 1-5 (validation)
                     if 1.0 <= rating <= 5.0:
                         return rating
             
-            # 공식 별점이 없고 예측 별점 사용이 활성화된 경우
+            # If no official rating and prediction is enabled
             if use_prediction and 'star_predictions' in tables:
                 query = """
                     SELECT predicted_star, confidence, release
@@ -333,11 +333,11 @@ class HospitalSearchEngine:
                     predicted = float(df.iloc[0]['predicted_star'])
                     confidence = float(df.iloc[0]['confidence'])
                     
-                    # 신뢰도가 0.3 이상이고 별점 범위 내인 경우만 반환
+                    # Only return if confidence >= 0.3 and rating is within valid range
                     if confidence >= 0.3 and 1.0 <= predicted <= 5.0:
                         return predicted
 
-            # 공식/예측 별점이 없고 추정 사용 시, 추정 별점 계산
+            # If no official/predicted rating and estimation is enabled, calculate estimated rating
             if use_estimated and 'hospital_metrics' in tables:
                 est = self.get_estimated_star_rating(ccn)
                 if est is not None:
@@ -352,7 +352,7 @@ class HospitalSearchEngine:
 
     def get_cms_rating_with_source(self, ccn: str) -> Dict[str, Any]:
         """
-        CMS 별점 + 출처 + 부가정보 반환
+        Return CMS star rating + source + additional info
         Returns: {
             "rating": float|None,
             "source": "official|predicted|estimated|none",
@@ -366,7 +366,7 @@ class HospitalSearchEngine:
         con = duckdb.connect(self.db_path, read_only=True)
         try:
             tables = con.execute("SHOW TABLES").df()['name'].tolist()
-            # 공식
+            # Official
             if 'hospital_star' in tables:
                 df = con.execute(
                     """
@@ -382,7 +382,7 @@ class HospitalSearchEngine:
                         res["source"] = "official"
                         res["reason"] = df.iloc[0].get('reason')
                         return res
-            # 예측
+            # Predicted
             if 'star_predictions' in tables:
                 df = con.execute(
                     """
@@ -398,7 +398,7 @@ class HospitalSearchEngine:
                         res["source"] = "predicted"
                         res["confidence"] = conf
                         return res
-            # 추정
+            # Estimated
             est = self.get_estimated_star_rating(ccn)
             if est is not None:
                 res["rating"] = est
@@ -411,14 +411,14 @@ class HospitalSearchEngine:
 
     def get_estimated_star_rating(self, ccn: str) -> Optional[float]:
         """
-        공식/예측 별점이 없을 때 도메인 메트릭으로 추정 별점(1~5) 계산.
-        방법: 같은 release 내 도메인별 percent_rank → CMS 가중치 합산 → 1~5 매핑.
+        Calculate estimated star rating (1~5) from domain metrics when no official/predicted rating exists.
+        Method: percent_rank by domain within same release → sum with CMS weights → map to 1~5.
         """
         if not os.path.exists(self.db_path):
             return None
         con = duckdb.connect(self.db_path, read_only=True)
         try:
-            # 해당 CCN의 최신 release 추출
+            # Extract latest release for this CCN
             rel_df = con.execute(
                 """
                 SELECT release FROM hospital_metrics
@@ -430,8 +430,8 @@ class HospitalSearchEngine:
                 return None
             release = rel_df.iloc[0]['release']
 
-            # 도메인별 percent_rank 계산 (direction에 따라 정렬 방향 결정)
-            # percent_rank(): 0~1, 높을수록 좋은 성능이 되도록 처리
+            # Calculate percent_rank by domain (sort direction based on direction field)
+            # percent_rank(): 0~1, higher value = better performance
             sql = f"""
             WITH base AS (
                 SELECT ccn, domain, TRY_CAST(value AS DOUBLE) AS val,
@@ -459,7 +459,7 @@ class HospitalSearchEngine:
                 FROM ranked GROUP BY ccn
             )
             SELECT ccn,
-              -- 가중치: 0.22,0.22,0.22,0.22,0.12 (결측은 남은 가중치로 재분배)
+              -- Weights: 0.22,0.22,0.22,0.22,0.12 (missing values redistribute remaining weights)
               (
                 COALESCE(mort, 0) * 0.22 +
                 COALESCE(readm, 0) * 0.22 +
@@ -481,7 +481,7 @@ class HospitalSearchEngine:
                 return None
             score = float(df.iloc[0]['score'])
             score = max(0.0, min(1.0, score))
-            # 0~1 → 1~5 매핑 (소수점 한 자리)
+            # Map 0~1 → 1~5 (one decimal place)
             est = round(1.0 + 4.0 * score, 1)
             return est
         except Exception:
@@ -491,7 +491,7 @@ class HospitalSearchEngine:
     
     def get_predicted_star_rating(self, ccn: str) -> Optional[Dict]:
         """
-        예측 별점 상세 정보 가져오기
+        Get detailed prediction information
         
         Returns:
             {
@@ -500,7 +500,7 @@ class HospitalSearchEngine:
                 "release": str,
                 "markov_prediction": float,
                 "regression_prediction": float
-            } 또는 None
+            } or None
         """
         if not os.path.exists(self.db_path):
             return None
@@ -544,7 +544,7 @@ class HospitalSearchEngine:
     
     def get_psychiatric_quality_indicators(self, ccn: str) -> Optional[Dict[str, Any]]:
         """
-        정신병원 품질 지표 조회 (IPFQR 데이터)
+        Get psychiatric hospital quality indicators (IPFQR data)
         
         Returns:
             {
@@ -555,13 +555,13 @@ class HospitalSearchEngine:
                     ...
                 ]
             }
-            또는 None (정신병원이 아니거나 데이터 없음)
+            or None (not a psychiatric hospital or no data available)
         """
-        # IPFQR CSV 파일 경로 찾기
+        # Find IPFQR CSV file path
         data_dir = os.path.join(os.path.dirname(self.warehouse_dir), "cms", "data")
         ipfqr_file = None
         
-        # data 폴더 내에서 IPFQR 파일 찾기
+        # Find IPFQR file within data folder
         if os.path.exists(data_dir):
             for root, dirs, files in os.walk(data_dir):
                 for file in files:
@@ -578,7 +578,7 @@ class HospitalSearchEngine:
             import pandas as pd
             df = pd.read_csv(ipfqr_file, dtype=str, low_memory=False)
             
-            # CCN으로 검색
+            # Search by CCN
             matches = df[df['Facility ID'].astype(str).str.strip() == ccn]
             
             if matches.empty:
@@ -587,8 +587,8 @@ class HospitalSearchEngine:
             row = matches.iloc[0]
             indicators = []
             
-            # 주요 지표 추출 및 해석
-            # 1. 물리적 제지 사용 (낮을수록 좋음)
+            # Extract and interpret key indicators
+            # 1. Physical restraint usage (lower is better)
             restraint_rate = row.get('HBIPS-2 Overall Rate Per 1000')
             if pd.notna(restraint_rate) and str(restraint_rate).strip() and str(restraint_rate) not in ['Not Available', 'N/A']:
                 try:
@@ -597,12 +597,12 @@ class HospitalSearchEngine:
                         "name": "Physical Restraint Use",
                         "value": f"{rate_val:.2f} per 1,000 patient hours",
                         "description": "Hours of physical restraint use",
-                        "good": rate_val < 0.5  # 0.5 미만이면 좋음
+                        "good": rate_val < 0.5  # Good if < 0.5
                     })
                 except:
                     pass
             
-            # 2. 격리 사용 (낮을수록 좋음)
+            # 2. Seclusion usage (lower is better)
             seclusion_rate = row.get('HBIPS-3 Overall Rate Per 1000')
             if pd.notna(seclusion_rate) and str(seclusion_rate).strip() and str(seclusion_rate) not in ['Not Available', 'N/A']:
                 try:
@@ -611,12 +611,12 @@ class HospitalSearchEngine:
                         "name": "Seclusion Use",
                         "value": f"{rate_val:.2f} per 1,000 patient hours",
                         "description": "Hours of seclusion use",
-                        "good": rate_val < 0.5  # 0.5 미만이면 좋음
+                        "good": rate_val < 0.5  # Good if < 0.5
                     })
                 except:
                     pass
             
-            # 3. 7일 내 후속 진료 (높을수록 좋음)
+            # 3. Follow-up within 7 days (higher is better)
             fuh7_pct = row.get('FUH-7 %')
             if pd.notna(fuh7_pct) and str(fuh7_pct).strip() and str(fuh7_pct) not in ['Not Available', 'N/A']:
                 try:
@@ -625,12 +625,12 @@ class HospitalSearchEngine:
                         "name": "7-Day Follow-Up After Discharge",
                         "value": f"{pct_val:.1f}%",
                         "description": "Patients receiving follow-up within 7 days",
-                        "good": pct_val >= 50.0  # 50% 이상이면 좋음
+                        "good": pct_val >= 50.0  # Good if >= 50%
                     })
                 except:
                     pass
             
-            # 4. 30일 재입원율 (낮을수록 좋음)
+            # 4. 30-day readmission rate (lower is better)
             readm_rate = row.get('READM-30-IPF Rate')
             if pd.notna(readm_rate) and str(readm_rate).strip() and str(readm_rate) not in ['Not Available', 'N/A']:
                 try:
@@ -639,12 +639,12 @@ class HospitalSearchEngine:
                         "name": "30-Day Readmission Rate",
                         "value": f"{rate_val:.1f}%",
                         "description": "Patients readmitted within 30 days",
-                        "good": rate_val < 20.0  # 20% 미만이면 좋음
+                        "good": rate_val < 20.0  # Good if < 20%
                     })
                 except:
                     pass
             
-            # 5. 약물 치료 지속성
+            # 5. Medication treatment persistence
             medcopsy_pct = row.get('MedCoPsy %')
             if pd.notna(medcopsy_pct) and str(medcopsy_pct).strip() and str(medcopsy_pct) not in ['Not Available', 'N/A']:
                 try:
@@ -653,12 +653,12 @@ class HospitalSearchEngine:
                         "name": "Medication Continuation Post-Discharge",
                         "value": f"{pct_val:.1f}%",
                         "description": "Patients continuing medication after discharge",
-                        "good": pct_val >= 70.0  # 70% 이상이면 좋음
+                        "good": pct_val >= 70.0  # Good if >= 70%
                     })
                 except:
                     pass
             
-            # 6. 퇴원 기록 전송 적시성
+            # 6. Timeliness of discharge record transmission
             tr2_pct = row.get('TR-2 %')
             if pd.notna(tr2_pct) and str(tr2_pct).strip() and str(tr2_pct) not in ['Not Available', 'N/A']:
                 try:
@@ -667,7 +667,7 @@ class HospitalSearchEngine:
                         "name": "Timely Transition Record",
                         "value": f"{pct_val:.1f}%",
                         "description": "Discharge records sent on time",
-                        "good": pct_val >= 80.0  # 80% 이상이면 좋음
+                        "good": pct_val >= 80.0  # Good if >= 80%
                     })
                 except:
                     pass
@@ -690,7 +690,7 @@ class HospitalSearchEngine:
     
     def get_pediatric_quality_indicators(self, ccn: str) -> Optional[Dict[str, Any]]:
         """
-        소아병원 품질 지표 조회 (PCH 데이터)
+        Get pediatric hospital quality indicators (PCH data)
         
         Returns:
             {
@@ -701,13 +701,13 @@ class HospitalSearchEngine:
                     ...
                 ]
             }
-            또는 None (소아병원이 아니거나 데이터 없음)
+            or None (not a pediatric hospital or no data available)
         """
-        # PCH CSV 파일 경로 찾기
+        # Find PCH CSV file paths
         data_dir = os.path.join(os.path.dirname(self.warehouse_dir), "cms", "data")
         pch_files = {}
         
-        # data 폴더 내에서 PCH 파일들 찾기
+        # Find PCH files within data folder
         if os.path.exists(data_dir):
             for root, dirs, files in os.walk(data_dir):
                 for file in files:
@@ -719,7 +719,7 @@ class HospitalSearchEngine:
                         elif 'INFECTIONS' in file:
                             pch_files['infections'] = os.path.join(root, file)
                 
-                # 최소 1개 파일이라도 있으면 break
+                # Break if at least one file is found
                 if pch_files:
                     break
         
@@ -731,7 +731,7 @@ class HospitalSearchEngine:
             indicators = []
             found_data = False
             
-            # 1. 합병증 및 예기치 않은 병원 방문
+            # 1. Complications and unexpected hospital visits
             if 'complications' in pch_files:
                 try:
                     df = pd.read_csv(pch_files['complications'], dtype=str, low_memory=False)
@@ -747,11 +747,11 @@ class HospitalSearchEngine:
                             if pd.notna(rate) and str(rate).strip() and rate not in ['Not Available', 'N/A']:
                                 try:
                                     rate_val = float(rate)
-                                    # 낮은 합병증률이 좋음
+                                    # Lower complication rate is better
                                     is_good = 'Better' in performance or rate_val < 5.0
                                     
                                     indicators.append({
-                                        "name": measure_desc[:50],  # 이름 제한
+                                        "name": measure_desc[:50],  # Limit name length
                                         "value": f"{rate_val:.2f}%",
                                         "description": "Complication/unplanned visit rate",
                                         "good": is_good
@@ -761,7 +761,7 @@ class HospitalSearchEngine:
                 except Exception:
                     pass
             
-            # 2. 환자 경험 (HCAHPS)
+            # 2. Patient experience (HCAHPS)
             if 'hcahps' in pch_files:
                 try:
                     df = pd.read_csv(pch_files['hcahps'], dtype=str, low_memory=False)
@@ -769,10 +769,10 @@ class HospitalSearchEngine:
                     
                     if not matches.empty:
                         found_data = True
-                        # Star Rating이 있는 행만 선택
+                        # Select only rows with Star Rating
                         star_rows = matches[matches['Patient Survey Star Rating'].notna()]
                         
-                        for _, row in star_rows.head(3).iterrows():  # 상위 3개만
+                        for _, row in star_rows.head(3).iterrows():  # Top 3 only
                             question = row.get('HCAHPS Question', '')
                             star_rating = row.get('Patient Survey Star Rating')
                             
@@ -792,7 +792,7 @@ class HospitalSearchEngine:
                 except Exception:
                     pass
             
-            # 3. 의료 관련 감염
+            # 3. Healthcare-associated infections
             if 'infections' in pch_files:
                 try:
                     df = pd.read_csv(pch_files['infections'], dtype=str, low_memory=False)
@@ -800,7 +800,7 @@ class HospitalSearchEngine:
                     
                     if not matches.empty:
                         found_data = True
-                        for _, row in matches.head(3).iterrows():  # 상위 3개만
+                        for _, row in matches.head(3).iterrows():  # Top 3 only
                             measure_name = row.get('Measure Name', '')
                             score = row.get('Score')
                             

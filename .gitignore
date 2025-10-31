@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Data files (중요!)
+*.csv
+*.parquet
+*.duckdb
+*.db
+*.sqlite
+Signum_1/cms/data/
+Signum_1/cms/data_1/
+Signum_1/warehouse/
+Signum_1/reports/
+*.zip
+*.tar.gz
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Usage tracking
+.usage_counters.json
+
+# Environment
+.env
+free_provider_apis/.env
+

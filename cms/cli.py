@@ -87,5 +87,64 @@ def sample(
     print({"sample": path})
 
 
+@app.command()
+def search(
+    warehouse_dir: str = typer.Option(DEFAULT_WAREHOUSE_DIR, help="Warehouse dir"),
+):
+    """
+    Interactive hospital search with Google + NPPES + CMS integration
+    
+    Supports:
+    - Hospital search by name, location, specialty
+    - Doctor search with hospital affiliations
+    - Regional/specialty filtered search
+    
+    Example:
+        python -m cms.cli search
+    """
+    import sys
+    import os
+    from pathlib import Path
+    
+    # Try to import from Signum_1/cms
+    project_root = Path(__file__).resolve().parents[1]
+    signum1_path = project_root / "Signum_1"
+    signum1_cms = signum1_path / "cms"
+    
+    if not signum1_cms.exists():
+        print("[red]Error: Signum_1/cms directory not found.[/red]")
+        print(f"[yellow]Expected: {signum1_cms}[/yellow]")
+        raise typer.Exit(code=1)
+    
+    # Add Signum_1 to Python path so we can import cms.interactive_search
+    signum1_str = str(signum1_path)
+    if signum1_str not in sys.path:
+        sys.path.insert(0, signum1_str)
+    
+    # Change to Signum_1 directory to ensure relative imports work
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(str(signum1_path))
+        from cms import interactive_search
+    except ImportError as e:
+        print(f"[red]Error importing interactive_search: {e}[/red]")
+        print(f"[yellow]Make sure Signum_1/cms/interactive_search.py exists[/yellow]")
+        raise typer.Exit(code=1)
+    finally:
+        os.chdir(original_cwd)
+    
+    # Use the warehouse_dir from Signum_1 if it exists and no explicit path given
+    signum1_warehouse = signum1_path / "warehouse"
+    if signum1_warehouse.exists() and warehouse_dir == DEFAULT_WAREHOUSE_DIR:
+        warehouse_dir = str(signum1_warehouse)
+    elif not Path(warehouse_dir).exists():
+        # If default doesn't exist, try Signum_1/warehouse
+        if signum1_warehouse.exists():
+            warehouse_dir = str(signum1_warehouse)
+            print(f"[yellow]Using warehouse: {warehouse_dir}[/yellow]")
+    
+    interactive_search.search_interactive(warehouse_dir)
+
+
 if __name__ == "__main__":
     app()

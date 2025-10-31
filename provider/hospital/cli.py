@@ -292,10 +292,10 @@ def learn(
     force: bool = typer.Option(False, help="Force retrain all data (ignore previous training)"),
 ):
     """
-    🚀 COMPLETE AUTOMATION: Learn from cms/data folder automatically
+    🚀 COMPLETE AUTOMATION: Learn from hospital/data folder automatically
     
     This command does EVERYTHING:
-    1. Finds ZIP files in cms/data folder
+    1. Finds ZIP files in hospital/data folder
     2. Skips already processed files
     3. Processes new files in chronological order
     4. Trains AI models sequentially
@@ -304,7 +304,7 @@ def learn(
     7. Generates all HTML reports
     8. Packages everything for delivery
     
-    Just put ZIP files in cms/data/ and run this command!
+    Just put ZIP files in hospital/data/ and run this command!
     """
     print("🚀 CMS Hospital Analytics - COMPLETE AUTOMATION")
     print("=" * 60)
@@ -327,7 +327,7 @@ def learn(
     
     # Check current status
     status = trainer.get_status()
-    print(f"📁 Data folder: cms/data")
+    print(f"📁 Data folder: hospital/data")
     print(f"📊 Warehouse: {warehouse_dir}")
     print(f"📄 Reports: {reports_dir}")
     print()
@@ -349,8 +349,8 @@ def learn(
         results = trainer.train_sequential()
         
         if results["status"] == "no_data":
-            print("❌ No ZIP files found in cms/data folder")
-            print("📋 Please add ZIP files to cms/data/ and try again")
+            print("❌ No ZIP files found in hospital/data folder")
+            print("📋 Please add ZIP files to hospital/data/ and try again")
             raise typer.Exit(code=1)
         
         elif results["status"] == "already_processed":
@@ -440,7 +440,7 @@ def status(
     data_summary = status["data_summary"]
     training_summary = status["training_summary"]
     
-    print(f"📁 Data folder: cms/data")
+    print(f"📁 Data folder: hospital/data")
     print(f"📦 Total ZIP files: {data_summary['total_files']}")
     print(f"📅 Files with dates: {data_summary['files_with_dates']}")
     

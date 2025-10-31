@@ -18,9 +18,9 @@ except Exception:
 
 # 절대 임포트(패키지) → 실패 시 로컬 모듈 폴백
 try:
-    import free_provider_apis.google.places_client_v1 as pc
-    import free_provider_apis.google.usage_tracker as ut
-    import free_provider_apis.google.feature_flags as ff
+    import provider.google.places_client_v1 as pc
+    import provider.google.usage_tracker as ut
+    import provider.google.feature_flags as ff
 except Exception:
     import places_client_v1 as pc
     import usage_tracker as ut

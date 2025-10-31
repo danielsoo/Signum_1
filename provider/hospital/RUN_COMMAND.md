@@ -8,17 +8,17 @@
 
 ```bash
 # Signum_1 폴더에서
-cd Signum_1
+cd provider/hospital
 
 # 가상 환경의 python으로 실행
-../.venv/bin/python -m cms.cli search
+../.venv/bin/python -m hospital.cli search
 ```
 
 또는 가상 환경을 활성화하고:
 ```bash
-cd Signum_1
+cd provider/hospital
 source ../.venv/bin/activate
-python -m cms.cli search  # python3 아님, python만!
+python -m hospital.cli search  # python3 아님, python만!
 ```
 
 ## 차이점
@@ -28,8 +28,8 @@ python -m cms.cli search  # python3 아님, python만!
 
 ## 빠른 테스트
 ```bash
-cd Signum_1
-../.venv/bin/python -m cms.cli search
+cd provider/hospital
+../.venv/bin/python -m hospital.cli search
 ```
 
 이렇게 실행하면 모든 패키지가 정상적으로 import됩니다!

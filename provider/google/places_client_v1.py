@@ -7,8 +7,8 @@ import requests
 
 # 절대 임포트(패키지) → 실패 시 로컬 모듈 폴백
 try:
-    import free_provider_apis.google.usage_tracker as ut
-    import free_provider_apis.google.feature_flags as ff
+    import provider.google.usage_tracker as ut
+    import provider.google.feature_flags as ff
 except Exception:
     import usage_tracker as ut
     import feature_flags as ff

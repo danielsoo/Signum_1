@@ -8,21 +8,21 @@
 
 ### 방법 1: 가상 환경 활성화 후 실행
 ```bash
-cd Signum_1
+cd provider/hospital
 source ../.venv/bin/activate  # 또는 .venv/bin/activate
-python -m cms.cli search
+python -m hospital.cli search
 ```
 
 ### 방법 2: 가상 환경의 Python 직접 사용
 ```bash
-cd Signum_1
+cd provider/hospital
 ../.venv/bin/python3 -m cms.cli search
 ```
 
 ## 가상 환경 확인
 ```bash
 # 가상 환경이 활성화되어 있으면 프롬프트 앞에 (.venv) 표시
-(.venv) younsoopark@YounSooui-MacBookAir Signum_1 % python -m cms.cli search
+(.venv) younsoopark@YounSooui-MacBookAir Signum_1 % python -m hospital.cli search
 ```
 
 ## 패키지 설치 확인
@@ -35,7 +35,7 @@ pip list | grep -E "(requests|dotenv|duckdb)"
 ```bash
 # Signum_1 폴더에서
 source ../.venv/bin/activate  # 가상 환경 활성화
-python -m cms.cli search      # 실행
+python -m hospital.cli search      # 실행
 ```
 
 프롬프트 앞에 `(.venv)`이 보이면 올바르게 활성화된 것입니다!

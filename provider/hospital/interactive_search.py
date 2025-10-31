@@ -235,7 +235,7 @@ def try_google_search(query: str) -> List[Dict]:
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
             return []
@@ -251,8 +251,8 @@ def try_google_search(query: str) -> List[Dict]:
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.google.places_client_v1 import PlacesV1Client
-        from free_provider_apis.google.feature_flags import enable
+        from provider.google.places_client_v1 import PlacesV1Client
+        from provider.google.feature_flags import enable
         
         enable("text_search")
         client = PlacesV1Client(strict=False)
@@ -314,7 +314,7 @@ def try_nppes_search(name: str, city: str, state: str, warehouse_dir: str) -> Li
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
             from .search_engine import HospitalSearchEngine
@@ -337,7 +337,7 @@ def try_nppes_search(name: str, city: str, state: str, warehouse_dir: str) -> Li
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.government.clients_free import NPPESClient, CMSPDCClient
+        from provider.government.clients_free import NPPESClient, CMSPDCClient
         
         nppes_client = NPPESClient()
         cms_pdc = CMSPDCClient()
@@ -449,7 +449,7 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
             result["warnings"].append("NPPES API not available")
@@ -466,7 +466,7 @@ def verify_npi_ccn_match(npi: str, ccn: str, facility_name: str, state: str) -> 
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.government.clients_free import NPPESClient, CMSPDCClient
+        from provider.government.clients_free import NPPESClient, CMSPDCClient
         
         nppes_client = NPPESClient()
         cms_pdc_client = CMSPDCClient()
@@ -539,7 +539,7 @@ def get_npi_for_hospital(facility_name: str, state: Optional[str] = None) -> Opt
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
             return None
@@ -555,7 +555,7 @@ def get_npi_for_hospital(facility_name: str, state: Optional[str] = None) -> Opt
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.government.clients_free import NPPESClient
+        from provider.government.clients_free import NPPESClient
         
         nppes_client = NPPESClient()
         
@@ -627,7 +627,7 @@ def verify_nppes_for_hospital(google_hospital: Dict, warehouse_dir: str) -> Opti
 
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
 
         # Offline mode or missing free apis → fall back to local search immediately
         if os.getenv("FREE_APIS_OFFLINE") == "1" or not free_apis_path.exists():
@@ -644,7 +644,7 @@ def verify_nppes_for_hospital(google_hospital: Dict, warehouse_dir: str) -> Opti
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
 
-        from free_provider_apis.government.clients_free import NPPESClient, CMSPDCClient
+        from provider.government.clients_free import NPPESClient, CMSPDCClient
 
         nppes_client = NPPESClient()
         cms_pdc_client = CMSPDCClient()
@@ -955,10 +955,10 @@ def search_doctor_interactive(warehouse_dir: str) -> str:
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
-            print("❌ free_provider_apis not found")
+            print("❌ provider not found")
             return show_action_menu()
         
         env_file = free_apis_path / ".env"
@@ -972,7 +972,7 @@ def search_doctor_interactive(warehouse_dir: str) -> str:
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.government.clients_free import NPPESClient, CMSPDCClient
+        from provider.government.clients_free import NPPESClient, CMSPDCClient
         
         nppes_client = NPPESClient()
         cms_pdc = CMSPDCClient()
@@ -1273,13 +1273,13 @@ def _get_user_coordinates(user_city: str, user_state: str):
         from pathlib import Path
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists() or os.getenv("FREE_APIS_OFFLINE") == "1":
             return None
         
         sys.path.insert(0, str(signum_root))
-        from free_provider_apis.google.places_client_v1 import PlacesV1Client
+        from provider.google.places_client_v1 import PlacesV1Client
         
         env_file = free_apis_path / ".env"
         if env_file.exists():
@@ -1561,7 +1561,7 @@ def search_by_specialty(warehouse_dir: str) -> str:
         
         current_file = Path(__file__).resolve()
         signum_root = current_file.parent.parent.parent
-        free_apis_path = signum_root / "free_provider_apis"
+        free_apis_path = signum_root / "provider"
         
         if not free_apis_path.exists():
             print("❌ NPPES API not available")
@@ -1579,7 +1579,7 @@ def search_by_specialty(warehouse_dir: str) -> str:
         if str(signum_root) not in sys.path:
             sys.path.insert(0, str(signum_root))
         
-        from free_provider_apis.government.clients_free import NPPESClient
+        from provider.government.clients_free import NPPESClient
         
         nppes_client = NPPESClient()
         

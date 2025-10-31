@@ -84,7 +84,7 @@ REASON_MAP = {
     "Measure Not Applicable": "Not Applicable",
 }
 
-# Defaults resolve relative to the project root (one level above this package)
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Defaults resolve relative to the hospital package directory
+PROJECT_ROOT = Path(__file__).resolve().parents[0]
 DEFAULT_WAREHOUSE_DIR = os.environ.get("CMS_WAREHOUSE_DIR", str(PROJECT_ROOT / "warehouse"))
 DEFAULT_REPORTS_DIR = os.environ.get("CMS_REPORTS_DIR", str(PROJECT_ROOT / "reports"))

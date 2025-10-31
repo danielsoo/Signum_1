@@ -16,7 +16,7 @@ Signum_1 CMS 시스템에 새로운 통합 API가 추가되었습니다:
 ### 1. 기본 병원 검색
 
 ```python
-from Signum_1.cms import UnifiedHospitalService
+from provider.hospital import UnifiedHospitalService
 
 service = UnifiedHospitalService()
 
@@ -34,7 +34,7 @@ print(result)
 ### 2. CCN으로 상세 조회
 
 ```python
-from Signum_1.cms import UnifiedHospitalService
+from provider.hospital import UnifiedHospitalService
 
 service = UnifiedHospitalService()
 
@@ -60,7 +60,7 @@ for domain, metrics in data["domain_metrics"].items():
 ### 3. Google 데이터와 비교 분석
 
 ```python
-from Signum_1.cms import UnifiedHospitalService
+from provider.hospital import UnifiedHospitalService
 
 service = UnifiedHospitalService()
 
@@ -83,7 +83,7 @@ print(f"분석: {comp['analysis']}")
 ### 4. 위험 지표 체크
 
 ```python
-from Signum_1.cms import RiskAnalyzer
+from provider.hospital import RiskAnalyzer
 
 analyzer = RiskAnalyzer()
 
@@ -98,14 +98,14 @@ for alert in alerts:
 
 ```python
 # 1. Google에서 병원 검색 (free_provider_apis 사용)
-from free_provider_apis.google.places_client_v1 import PlacesV1Client
+from provider.google.places_client_v1 import PlacesV1Client
 
 google_client = PlacesV1Client()
 results = google_client.search_text("Mayo Clinic Rochester")
 place = results["places"][0]
 
 # 2. NPPES에서 CCN 찾기 (free_provider_apis 사용)
-from free_provider_apis.government.clients_free import NPPESClient, CMSPDCClient
+from provider.government.clients_free import NPPESClient, CMSPDCClient
 
 # NPPES로 검색하여 병원 찾기
 nppes_client = NPPESClient()
@@ -116,7 +116,7 @@ cms_pdc = CMSPDCClient()
 ccns = [a["ccn"] for a in cms_pdc.get_hospital_affiliations_by_npi(npi) if a.get("ccn")]
 
 # 3. CMS 데이터 조회 (Signum_1)
-from Signum_1.cms import UnifiedHospitalService
+from provider.hospital import UnifiedHospitalService
 
 service = UnifiedHospitalService()
 evaluation = service.get_hospital_data(ccns[0], {
@@ -253,8 +253,8 @@ Google vs CMS 별점 비교
 
 ```bash
 # 1. 데이터 로드
-cd Signum_1
-python -m cms.cli learn
+cd provider/hospital
+python -m hospital.cli learn
 
 # 2. Python에서 사용
 python

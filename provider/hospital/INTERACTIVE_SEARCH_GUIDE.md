@@ -3,8 +3,8 @@
 ## Quick Start
 
 ```bash
-cd Signum_1
-python -m cms.cli search
+cd provider/hospital
+python -m hospital.cli search
 ```
 
 ## Features

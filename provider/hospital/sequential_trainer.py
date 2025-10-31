@@ -1,7 +1,7 @@
 """
 Sequential Trainer - 순차 학습 모듈
 
-cms/data 폴더의 ZIP 파일을 자동으로 찾아서 순차적으로 ETL → 학습 → 평가 → 리포트 생성까지
+hospital/data 폴더의 ZIP 파일을 자동으로 찾아서 순차적으로 ETL → 학습 → 평가 → 리포트 생성까지
 모든 과정을 자동화합니다.
 """
 from __future__ import annotations
@@ -40,9 +40,9 @@ class SequentialTrainer:
         self.warehouse_dir = warehouse_dir or DEFAULT_WAREHOUSE_DIR
         self.reports_dir = reports_dir or DEFAULT_REPORTS_DIR
         
-        # 프로젝트 루트 찾기 (cms/data 폴더 위치)
-        project_root = Path(__file__).resolve().parents[1]
-        self.data_dir = project_root / "cms" / "data"
+        # hospital 패키지 디렉토리 (data 폴더 위치)
+        hospital_root = Path(__file__).resolve().parents[0]
+        self.data_dir = hospital_root / "data"
         
         # 학습 상태 추적기
         self.tracker = TrainingTracker(self.warehouse_dir)

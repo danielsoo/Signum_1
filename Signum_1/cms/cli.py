@@ -316,16 +316,16 @@ def learn(
         print("[red]❌ Training modules not available. Please install required dependencies.[/red]")
         raise typer.Exit(code=1)
     
-    # 학습 상태 초기화 (강제 재학습)
+    # Reset training state (force retraining)
     if force:
         print("⚠️ Force mode: Resetting all training status")
         tracker = TrainingTracker(warehouse_dir)
         tracker.reset_training_status()
     
-    # 순차 학습기 초기화
+    # Initialize sequential trainer
     trainer = SequentialTrainer(warehouse_dir, reports_dir)
     
-    # 현재 상태 확인
+    # Check current status
     status = trainer.get_status()
     print(f"📁 Data folder: cms/data")
     print(f"📊 Warehouse: {warehouse_dir}")
@@ -343,7 +343,7 @@ def learn(
         print(f"📅 Date range: {data_summary['date_range']['earliest']} to {data_summary['date_range']['latest']}")
     print()
     
-    # 학습 실행
+    # Execute training
     try:
         print("🎯 Starting sequential training...")
         results = trainer.train_sequential()
@@ -357,7 +357,7 @@ def learn(
             print("✅ All files already processed!")
             print("💡 Use --force to retrain all data")
             
-            # 기존 결과 리포트 생성
+            # Generate report for existing results
             print("📊 Generating reports from existing data...")
             _generate_final_reports(trainer, warehouse_dir, reports_dir)
             
@@ -365,7 +365,7 @@ def learn(
             print("🎉 Training completed successfully!")
             print()
             
-            # 결과 요약
+            # Summarize results
             print("📊 Training Results:")
             print(f"  ✅ Processed: {len(results['processed_files'])} files")
             print(f"  ❌ Errors: {len(results['errors'])} files")
@@ -375,10 +375,10 @@ def learn(
                 print()
                 print("📋 Processed Files:")
                 for file_info in results["processed_files"]:
-                    # filename 우선순위: file -> file_path -> filename 키
+                    # filename priority: file -> file_path -> filename key
                     file_field = file_info.get("file") or file_info.get("file_path") or file_info.get("filename") or "unknown"
                     filename = os.path.basename(file_field) if isinstance(file_field, str) else str(file_field)
-                    # 레코드 안전 접근
+                    # Safe record access
                     recs = file_info.get("records", {}) or {}
                     records_total = recs.get("total") if isinstance(recs, dict) else None
                     records_text = f"{records_total} records" if records_total is not None else "records processed"
@@ -391,7 +391,7 @@ def learn(
                     filename = os.path.basename(error_info["file"])
                     print(f"  ❌ {filename}: {error_info['error']}")
             
-            # 최종 리포트 생성
+            # Generate final report
             try:
                 from .reports import ReportGenerator
                 print()
@@ -400,7 +400,7 @@ def learn(
             except ImportError:
                 print("[yellow]⚠️  Reports module not available, skipping report generation[/yellow]")
         
-        # 최종 패키징
+        # Final packaging
         print()
         print("📦 Packaging results...")
         package_path = _package_all_results(warehouse_dir, reports_dir)
@@ -475,7 +475,7 @@ def sample(
 
 
 def _generate_final_reports(trainer: SequentialTrainer, warehouse_dir: str, reports_dir: str):
-    """최종 리포트 생성"""
+    """Generate final report"""
     try:
         from .reports import ReportGenerator
     except ImportError:
@@ -483,7 +483,7 @@ def _generate_final_reports(trainer: SequentialTrainer, warehouse_dir: str, repo
         return
     
     try:
-        # 최신 릴리스 찾기
+        # Find latest release
         processed_releases = trainer.tracker.get_processed_releases()
         if not processed_releases:
             print("⚠️ No processed releases found")
@@ -492,12 +492,12 @@ def _generate_final_reports(trainer: SequentialTrainer, warehouse_dir: str, repo
         latest_release = processed_releases[-1]
         earliest_release = processed_releases[0]
         
-        # 리포트 생성기 초기화
+        # Initialize report generator
         report_generator = ReportGenerator(warehouse_dir, reports_dir)
         
-        # 모든 리포트 생성
+        # Generate all reports
         print("  📄 Generating ETL report...")
-        # DuckDB에서 최소 프레임 로드 (샘플 500행 정도면 충분)
+        # Load minimal frames from DuckDB (sample 500 rows is sufficient)
         import duckdb
         db_path = os.path.join(warehouse_dir, "hospital.duckdb")
         if not os.path.exists(db_path):
@@ -546,7 +546,7 @@ def _generate_final_reports(trainer: SequentialTrainer, warehouse_dir: str, repo
 
 
 def _package_all_results(warehouse_dir: str, reports_dir: str) -> str:
-    """모든 결과를 패키지로 압축"""
+    """Package all results into archive"""
     import zipfile
     from datetime import datetime
     
@@ -556,7 +556,7 @@ def _package_all_results(warehouse_dir: str, reports_dir: str) -> str:
     
     try:
         with zipfile.ZipFile(package_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # 웨어하우스 파일들 추가
+            # Add warehouse files
             if os.path.exists(warehouse_dir):
                 for root, dirs, files in os.walk(warehouse_dir):
                     for file in files:
@@ -564,7 +564,7 @@ def _package_all_results(warehouse_dir: str, reports_dir: str) -> str:
                         arcname = os.path.relpath(file_path, os.path.dirname(warehouse_dir))
                         zipf.write(file_path, arcname)
             
-            # 리포트 파일들 추가
+            # Add report files
             if os.path.exists(reports_dir):
                 for root, dirs, files in os.walk(reports_dir):
                     for file in files:
@@ -580,7 +580,7 @@ def _package_all_results(warehouse_dir: str, reports_dir: str) -> str:
 
 
 def _get_next_release(current_release: str) -> str:
-    """다음 릴리스 계산"""
+    """Calculate next release version"""
     year, month = current_release.split('_')
     year = int(year)
     month = int(month)

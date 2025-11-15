@@ -1,0 +1,18 @@
+[Unit]
+Description=SIGNUM Healthcare Provider Intelligence API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Signum_1
+Environment="PATH=/home/ubuntu/Signum_1/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/ubuntu/Signum_1/.venv/bin/python /home/ubuntu/Signum_1/api_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=signum-api
+
+[Install]
+WantedBy=multi-user.target

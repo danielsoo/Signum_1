@@ -1,0 +1,40 @@
+# SIGNUM API Server Dependencies
+# Healthcare Provider Intelligence Platform
+
+# Core FastAPI dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# CORS middleware
+python-multipart==0.0.6
+
+# Environment management
+python-dotenv==1.0.0
+
+# HTTP client for external APIs
+httpx==0.25.2
+requests==2.31.0
+
+# Data processing (matching existing project)
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Database support (for DuckDB integration)
+duckdb>=0.9.0
+
+# Optional: Enhanced logging and monitoring
+structlog==23.2.0
+
+# Rate limiting for API endpoints
+slowapi==0.1.9
+
+# Optional: API authentication and security
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# Development dependencies (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+isort==5.12.0
